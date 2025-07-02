@@ -31,7 +31,8 @@ void spawn( uint cpu ) { try {
 
     pid.onDrain.once([=](){
         if( process::is_exit() ){ return; }
-        console::error( "< spawned >" ); spawn( cpu );
+        console::error( "< A spawned >" );
+		spawn( cpu );
     });
 
 } catch(...) {} }
@@ -64,6 +65,7 @@ void create_http_redirector(){ process::delay(1000); try {
 
     server.onClose.once([=](){
         if( process::is_exit() ){ return; }
+		console::error( "< B spawned >" );
         create_http_redirector();
     });
 
@@ -86,8 +88,11 @@ void create_tor_node_server() { try {
     if ( !fs::exists_file( mid ) ){ throw ""; }
     auto pid=popen::async( cmd );
 
+	pid.onData([=]( string_t data ){ console::log(data); });
+
     pid.onDrain.once([](){
         if( process::is_exit() ){ return; }
+		console::error( "< C spawned >" );
         create_tor_node_server();
     });
 
@@ -100,8 +105,11 @@ void create_tor_node_server() { try {
     if ( !fs::exists_file( mid ) ){ throw ""; }
     auto pid=popen::async( cmd );
 
+	pid.onData([=]( string_t data ){ console::log(data); });
+
     pid.onDrain.once([](){
         if( process::is_exit() ){ return; }
+		console::error( "< D spawned >" );
         create_tor_node_server();
     });
     
