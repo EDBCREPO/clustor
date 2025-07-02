@@ -86,6 +86,11 @@ void create_tor_node_server() { try {
     if ( !fs::exists_file( mid ) ){ throw ""; }
     auto pid=popen::async( cmd );
 
+    pid.onDrain.once([](){
+        if( process::is_exit() ){ return; }
+        create_tor_node_server();
+    });
+
 } catch(...) {
 
     auto dir=string_t( "/tmp/tor_node_main" );
@@ -94,6 +99,11 @@ void create_tor_node_server() { try {
 
     if ( !fs::exists_file( mid ) ){ throw ""; }
     auto pid=popen::async( cmd );
+
+    pid.onDrain.once([](){
+        if( process::is_exit() ){ return; }
+        create_tor_node_server();
+    });
     
 } }
 
@@ -103,8 +113,8 @@ void create_controller_manifest(){ try {
     if( process::env::get("CPU").empty() ){ throw ""; }
 
     auto cpu=string::to_uint(process::env::get("CPU"));
-    auto dir=regex::format("/tmp/tor_node_${0}",cpu);
-    auto fid=regex::format("${0}/manifest.txt" ,dir);
+    auto dir=regex ::format("/tmp/tor_node_${0}",cpu);
+    auto fid=regex ::format("${0}/manifest.txt" ,dir);
 
     if( !fs::exists_folder(dir) ){ fs::create_folder(dir); }
     if(  fs::exists_file  (fid) ){ fs::remove_file  (fid); }
