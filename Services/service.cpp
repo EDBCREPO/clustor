@@ -55,6 +55,7 @@ void create_http_redirector(){ process::delay(1000); try {
 
     auto dir=regex::format( "/tmp/tor_node_${0}"  ,cpu );
     auto fid=regex::format( "${0}/hidden/hostname",dir );
+    auto prt=string::to_uint( process::env::get("CLS_PORT") );
     auto url=regex::format( "http://${0}", fs::read_file(fid).slice(0,-1) );
  
     auto server = http::server([=]( http_t cli ){
@@ -69,7 +70,7 @@ void create_http_redirector(){ process::delay(1000); try {
         create_http_redirector();
     });
 
-    server.listen( "localhost", 3000, [=]( socket_t ){
+    server.listen( "localhost", prt, [=]( socket_t ){
         console::log( "->", url );
     });
 
@@ -88,8 +89,6 @@ void create_tor_node_server() { try {
     if ( !fs::exists_file( mid ) ){ throw ""; }
     auto pid=popen::async( cmd );
 
-	pid.onData([=]( string_t data ){ console::log(data); });
-
     pid.onDrain.once([](){
         if( process::is_exit() ){ return; }
 		console::error( "< C spawned >" );
@@ -104,8 +103,6 @@ void create_tor_node_server() { try {
 
     if ( !fs::exists_file( mid ) ){ throw ""; }
     auto pid=popen::async( cmd );
-
-	pid.onData([=]( string_t data ){ console::log(data); });
 
     pid.onDrain.once([](){
         if( process::is_exit() ){ return; }
