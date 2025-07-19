@@ -1,5 +1,6 @@
 #include <nodepp/nodepp.h>
 #include <nodepp/cluster.h>
+#include <express/http.h>
 #include <nodepp/popen.h>
 #include <nodepp/timer.h>
 #include <nodepp/http.h>
@@ -29,8 +30,10 @@ void spawn( uint cpu ) { try {
     auto env=regex::format( "?CPU=${0}", cpu ); 
     auto pid=cluster::add ( ptr_t<string_t>({ env }) ); 
 
+    pid.onData([=]( string_t data ){ console::log(data); });
+
     pid.onDrain.once([=](){
-        if( process::is_exit() ){ return; }
+        if( process::should_close() ){ return; }
         console::error( "< A spawned >" );
 		spawn( cpu );
     });
@@ -39,7 +42,9 @@ void spawn( uint cpu ) { try {
 
 void create_load_balance() { try {
 
-    for( auto cpu=os::cpus(); cpu-->0; )
+    auto cpus = string::to_int( process::env::get("CPUS") );
+         cpus = cpus>0 ? cpus : os::cpus();
+    for( auto cpu=cpus ; cpu-->0; )
        { spawn( cpu ); }
 
 } catch(...) { 
@@ -51,28 +56,17 @@ void create_load_balance() { try {
 
 void create_http_redirector(){ process::delay(1000); try {
 
+    auto app=express::http::add();
     auto cpu=process::env::get("CPU");
 
     auto dir=regex::format( "/tmp/tor_node_${0}"  ,cpu );
     auto fid=regex::format( "${0}/hidden/hostname",dir );
     auto prt=string::to_uint( process::env::get("CLS_PORT") );
     auto url=regex::format( "http://${0}", fs::read_file(fid).slice(0,-1) );
- 
-    auto server = http::server([=]( http_t cli ){
-        cli.write_header( 302, header_t({ 
-            { "Location", url } 
-        })); cli.close();
-    });
 
-    server.onClose.once([=](){
-        if( process::is_exit() ){ return; }
-		console::error( "< B spawned >" );
-        create_http_redirector();
-    });
-
-    server.listen( "localhost", prt, [=]( socket_t ){
-        console::log( "->", url );
-    });
+    app.ALL([=]( express_http_t cli ){ cli.params["URL"]=url; });
+    app.USE( express::http::file( "./View" ) );
+    app.listen( "localhost", prt );
 
 } catch(...) {} }
 
@@ -90,7 +84,7 @@ void create_tor_node_server() { try {
     auto pid=popen::async( cmd );
 
     pid.onDrain.once([](){
-        if( process::is_exit() ){ return; }
+        if( process::should_close() ){ return; }
 		console::error( "< C spawned >" );
         create_tor_node_server();
     });
@@ -105,7 +99,7 @@ void create_tor_node_server() { try {
     auto pid=popen::async( cmd );
 
     pid.onDrain.once([](){
-        if( process::is_exit() ){ return; }
+        if( process::should_close() ){ return; }
 		console::error( "< D spawned >" );
         create_tor_node_server();
     });
@@ -121,14 +115,15 @@ void create_controller_manifest(){ try {
     auto dir=regex ::format("/tmp/tor_node_${0}",cpu);
     auto fid=regex ::format("${0}/manifest.txt" ,dir);
 
-    if( !fs::exists_folder(dir) ){ fs::create_folder(dir); }
-    if(  fs::exists_file  (fid) ){ fs::remove_file  (fid); }
+    if( fs::exists_folder(dir) ){ os::call( regex::format( "rm -R ${0}", dir ) ); }
+    if(!fs::exists_folder(dir) ){ fs::create_folder(dir); }
 
     auto tport = string::to_uint( process::env::get("TOR_PORT") )+cpu;
     auto iport = string::to_uint( process::env::get("INP_PORT") );
     auto oport = string::to_uint( process::env::get("OUT_PORT") );
 
     fs::writable(fid).write( regex::format(_STRING_(
+	   MaxCircuitDirtiness 300        \n
        SocksPort         ${0}         \n
        PidFile           ${3}/log.pid \n
        DataDirectory     ${3}/data    \n
@@ -141,14 +136,18 @@ void create_controller_manifest(){ try {
     auto dir=string_t( "/tmp/tor_node_main" );
     auto fid=regex::format("${0}/manifest.txt" ,dir);
 
-    if( !fs::exists_folder(dir) ){ fs::create_folder(dir); }
-//  if(  fs::exists_file  (fid) ){ fs::remove_file  (fid); }
+//  if( fs::exists_folder(dir) ){ os::call( regex::format( "rm -R ${0}", dir ) ); }
+    if(!fs::exists_folder(dir) ){ fs::create_folder(dir); }
 
-    auto tport = string::to_uint( process::env::get("TOR_PORT") )+os::cpus();
+    auto cpus = string::to_int( process::env::get("CPUS") );
+         cpus = cpus>0 ? cpus : os::cpus();
+
+    auto tport = string::to_uint( process::env::get("TOR_PORT") )+cpus;
     auto iport = string::to_uint( process::env::get("INP_PORT") );
     auto oport = string::to_uint( process::env::get("CLS_PORT") );
 
     fs::writable(fid).write( regex::format(_STRING_(
+	   MaxCircuitDirtiness 300        \n
        SocksPort         ${0}         \n
        PidFile           ${3}/log.pid \n
        DataDirectory     ${3}/data    \n
