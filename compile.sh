@@ -1,22 +1,15 @@
 #!/bin/bash
 
-clear ; ulimit -n 524288 10485760 ; VAL=$( ulimit -Sn ) ; echo -e "MAX_FILENO: $VAL"
+mkdir -p ./build
 
-FLAG="-lcrypto -lssl -lz" # -largon2
-NAME="service"
-FILE=$(mktemp)
-
-if [ ! -d "./Build" ] ; then 
-  mkdir "./Build"
+if [ ! -d "./build/CMakeFiles" ] ; then
+   ( cd ./build; cmake cmake .. )
 fi
 
-echo -e "\nKilling Service" ; $( killall $NAME )
+( cd ./build; make ); 
 
-echo -e "\nCompiling Service"
-if !( g++ -o ./Build/$NAME ./Services/$NAME.cpp -I ./Modules $FLAG ) 2> "$FILE"; then
-      echo -e "\n" ; cat "$FILE" >&2 ; exit
-else
-      echo -e "Done"
+if [ ! $? -eq 0 ]; then
+    echo "exit error"; exit;
 fi
 
-echo -e "\nRunning Service" ; ./Build/$NAME;
+./build/main

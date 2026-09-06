@@ -17,9 +17,9 @@ void show_main_url() { timer::timeout([=](){
 
     auto dir=string_t( "/tmp/tor_node_main" );
     auto fid=regex::format( "${0}/hidden/hostname",dir );
-    auto url=regex::format( "http://${0}", fs::read_file(fid).slice(0,-1) );
+    auto url=regex::format( "http://${0}", fs::read_file(fid).await().value().slice(0,-1) );
 
-    console::log( "<>", url );
+    console::log( "-", url );
 
 },1000); }
 
@@ -30,15 +30,14 @@ void spawn( uint cpu ) { try {
     auto env=regex::format( "?CPU=${0}", cpu );
     auto pid=cluster::add ( ptr_t<string_t>({ env }) );
 
-    pid.onData([=]( string_t data ){ console::log(data); });
+    pid.value().onData([=]( string_t data ){ conio::log(data); });
 
-    pid.onDrain.once([=](){
+    pid.value().onDrain.once([=](){
         if( process::should_close() ){ return; }
-        console::error( "< A spawned >" );
-		    spawn( cpu );
+		spawn( cpu );
     });
 
-} catch(...) {} }
+} catch( int ) { /*unused*/ } }
 
 void create_load_balance() { try {
 
@@ -47,7 +46,7 @@ void create_load_balance() { try {
     for( auto cpu=cpus ; cpu-->0; )
        { spawn( cpu ); }
 
-} catch(...) {
+} catch( int ) {
     console::error("something went wrong");
     process::exit (1);
 }}
@@ -62,45 +61,44 @@ void create_http_redirector(){ process::delay(1000); try {
     auto dir=regex::format( "/tmp/tor_node_${0}"  ,cpu );
     auto fid=regex::format( "${0}/hidden/hostname",dir );
     auto prt=string::to_uint( process::env::get("CLS_PORT") );
-    auto url=regex::format( "http://${0}", fs::read_file(fid).slice(0,-1) );
+    auto url=regex::format( "http://${0}", fs::read_file(fid).await().value().slice(0,-1) );
 
     app.ALL("/redirect",[=]( express_http_t cli ){ cli.redirect( url ); });
-    app.USE( express::http::file( "./View" ) );
+    app.USE( express::http::file( "./www" ) );
     app.listen( "localhost", prt );
 
-} catch(...) {} }
+} catch( int ) { /*unused*/ } }
 
 /*────────────────────────────────────────────────────────────────────────────*/
 
 void create_tor_node_server() { try {
-    if( process::env::get("CPU").empty() ){ throw ""; }
+
+    if( process::env::get("CPU").empty() ){ throw 0x00; }
 
     auto cpu=string::to_uint(process::env::get("CPU"));
-    auto dir=regex ::format("/tmp/tor_node_${0}",cpu);
-    auto mid=regex ::format("${0}/manifest.txt" ,dir);
-    auto cmd=regex ::format("tor -f ${0}",mid);
+    auto dir=regex ::format ("/tmp/tor_node_${0}",cpu);
+    auto mid=regex ::format ("${0}/manifest.txt" ,dir);
+    auto cmd=regex ::format ("tor -f ${0}",mid);
 
-    if ( !fs::exists_file( mid ) ){ throw ""; }
-    auto pid=popen::async( cmd );
+    if ( !fs::exists_file( mid ) ){ throw 0x00; }
+    auto pid=popen::add  ( cmd );
 
-    pid.onDrain.once([](){
+    pid.value().onDrain.once([](){
         if( process::should_close() ){ return; }
-		    console::error( "< C spawned >" );
         create_tor_node_server();
     });
 
-} catch(...) {
+} catch( int ) {
 
     auto dir=string_t( "/tmp/tor_node_main" );
     auto mid=regex::format("${0}/manifest.txt" ,dir);
     auto cmd=regex::format("tor -f ${0}",mid);
 
-    if ( !fs::exists_file( mid ) ){ throw ""; }
-    auto pid=popen::async( cmd );
+    if ( !fs::exists_file( mid ) ){ throw 0x00; }
+    auto pid=popen::add  ( cmd );
 
-    pid.onDrain.once([](){
+    pid.value().onDrain.once([](){
         if( process::should_close() ){ return; }
-		    console::error( "< D spawned >" );
         create_tor_node_server();
     });
 
@@ -109,7 +107,8 @@ void create_tor_node_server() { try {
 /*────────────────────────────────────────────────────────────────────────────*/
 
 void create_controller_manifest(){ try {
-    if( process::env::get("CPU").empty() ){ throw ""; }
+
+    if( process::env::get("CPU").empty() ){ throw 0x00; }
 
     auto cpu=string::to_uint(process::env::get("CPU"));
     auto dir=regex ::format("/tmp/tor_node_${0}",cpu);
@@ -122,7 +121,7 @@ void create_controller_manifest(){ try {
     auto iport = string::to_uint( process::env::get("INP_PORT") );
     auto oport = string::to_uint( process::env::get("OUT_PORT") );
 
-    fs::writable(fid).write( regex::format(_STRING_(
+    fs::writable(fid).write( regex::format( NODEPP_STRINGIFY (
 	   MaxCircuitDirtiness 300        \n
        SocksPort         ${0}         \n
        PidFile           ${3}/log.pid \n
@@ -131,7 +130,7 @@ void create_controller_manifest(){ try {
        HiddenServicePort ${1} 127.0.0.1:${2}
     ), tport, iport, oport, dir ));
 
-} catch(...) {
+} catch( int ) {
 
     auto dir=string_t( "/tmp/tor_node_main" );
     auto fid=regex::format("${0}/manifest.txt" ,dir);
@@ -146,7 +145,7 @@ void create_controller_manifest(){ try {
     auto iport = string::to_uint( process::env::get("INP_PORT") );
     auto oport = string::to_uint( process::env::get("CLS_PORT") );
 
-    fs::writable(fid).write( regex::format(_STRING_(
+    fs::writable(fid).write( regex::format( NODEPP_STRINGIFY (
 	   MaxCircuitDirtiness 300        \n
        SocksPort         ${0}         \n
        PidFile           ${3}/log.pid \n
